@@ -1,8 +1,9 @@
 @tool
 extends Node2D
 
-## Galerij: toont de laatste foto's van bezoekers op het wandscherm.
-## Scant een map voor PNG bestanden en toont de nieuwste in een grid.
+## Galerij: toont de laatste creaties van bezoekers als draaiende 2.5D kasten.
+## Elke foto bevat links de voorkant en rechts de binnenkant.
+## De kasten draaien continu met een Paper Mario-achtige platte 3D rotatie.
 
 @export_group("Fotos")
 ## Map waar foto's worden opgeslagen (absoluut pad)
@@ -14,18 +15,25 @@ extends Node2D
 
 @export_group("Layout")
 ## Aantal kolommen in het grid
-@export var columns: int = 2
+@export var columns: int = 4
 ## Ruimte tussen foto's
 @export var spacing: float = 30.0
 ## Marge rond het grid
 @export var margin: float = 50.0
 
+@export_group("Rotatie")
+## Hoe snel de kasten draaien (seconden per volle rotatie)
+@export var rotation_speed: float = 6.0
+## Hoe veel de kasten uit fase lopen (seconden verschil per kast)
+@export var phase_offset: float = 0.8
+
 @onready var _background: TextureRect = $Background
 
-var _foto_nodes: Array[TextureRect] = []
+var _kast_nodes: Array[Node2D] = []  ## Container nodes voor elke kast
+var _kast_data: Array[Dictionary] = []  ## {front: Texture2D, back: Texture2D, sprite: Sprite2D}
 var _current_files: Array[String] = []
 var _scan_timer: float = 0.0
-var _grid_container: Node2D = null
+var _time: float = 0.0
 
 
 func _ready() -> void:
@@ -34,16 +42,11 @@ func _ready() -> void:
 		return
 	get_tree().root.size_changed.connect(_resize_background)
 
-	# Bepaal fotos pad automatisch als niet ingesteld
 	if fotos_path.is_empty():
 		fotos_path = OS.get_system_dir(OS.SYSTEM_DIR_DESKTOP) + "/fotos"
 
-	# Maak de fotos map aan als die niet bestaat
 	if not DirAccess.dir_exists_absolute(fotos_path):
 		DirAccess.make_dir_recursive_absolute(fotos_path)
-
-	_grid_container = Node2D.new()
-	add_child(_grid_container)
 
 	_scan_fotos()
 
@@ -51,19 +54,45 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if Engine.is_editor_hint():
 		return
+
+	_time += delta
+
+	# Scan timer
 	_scan_timer += delta
 	if _scan_timer >= scan_interval:
 		_scan_timer = 0.0
 		_scan_fotos()
 
+	# Rotatie animatie voor elke kast
+	for i in _kast_data.size():
+		var data = _kast_data[i]
+		var sprite: Sprite2D = data["sprite"]
+		var front_tex: Texture2D = data["front"]
+		var back_tex: Texture2D = data["back"]
+
+		# Bereken rotatie fase (0-1) met offset per kast
+		var t = fmod((_time + i * phase_offset) / rotation_speed, 1.0)
+
+		# Gebruik cosinus voor de squash: 1 → 0 → -1 → 0 → 1
+		var squash = cos(t * TAU)
+
+		# Scale.x simuleert de 3D rotatie
+		sprite.scale.x = absf(squash) * absf(sprite.scale.y)
+
+		# Wissel texture op het omslagpunt
+		if squash > 0:
+			if sprite.texture != front_tex:
+				sprite.texture = front_tex
+		else:
+			if sprite.texture != back_tex:
+				sprite.texture = back_tex
+
 
 func _scan_fotos() -> void:
-	## Scan de fotos map voor PNG bestanden, toon de nieuwste
 	var dir = DirAccess.open(fotos_path)
 	if not dir:
 		return
 
-	# Verzamel alle PNG bestanden met hun modificatietijd
 	var files: Array[Dictionary] = []
 	dir.list_dir_begin()
 	var file_name = dir.get_next()
@@ -75,15 +104,12 @@ func _scan_fotos() -> void:
 		file_name = dir.get_next()
 	dir.list_dir_end()
 
-	# Sorteer op tijd (nieuwste eerst)
 	files.sort_custom(func(a, b): return a["time"] > b["time"])
 
-	# Neem de laatste max_fotos
 	var latest: Array[String] = []
 	for i in mini(files.size(), max_fotos):
 		latest.append(files[i]["path"])
 
-	# Check of er iets veranderd is
 	if latest == _current_files:
 		return
 
@@ -92,17 +118,16 @@ func _scan_fotos() -> void:
 
 
 func _update_grid() -> void:
-	## Herbouw het grid met de huidige foto's
 	# Verwijder oude nodes
-	for node in _foto_nodes:
+	for node in _kast_nodes:
 		node.queue_free()
-	_foto_nodes.clear()
+	_kast_nodes.clear()
+	_kast_data.clear()
 
 	if _current_files.is_empty():
 		return
 
-	# Bereken grid dimensies
-	var viewport_size = get_viewport_rect().size if not Engine.is_editor_hint() else Vector2(1080, 1920)
+	var viewport_size = get_viewport_rect().size if not Engine.is_editor_hint() else Vector2(1920, 1080)
 	var rows = ceili(float(max_fotos) / float(columns))
 	var available_w = viewport_size.x - margin * 2.0 - spacing * (columns - 1)
 	var available_h = viewport_size.y - margin * 2.0 - spacing * (rows - 1)
@@ -118,29 +143,56 @@ func _update_grid() -> void:
 		if err != OK:
 			continue
 
-		var tex = ImageTexture.create_from_image(image)
+		var img_w = image.get_width()
+		var img_h = image.get_height()
 
-		var foto_rect = TextureRect.new()
-		foto_rect.texture = tex
-		foto_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		foto_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		foto_rect.size = Vector2(cell_w, cell_h)
+		# Knip in twee helften: links = voorkant, rechts = binnenkant
+		@warning_ignore("integer_division")
+		var half_w = img_w / 2
 
-		# Positie in grid
+		var front_img = Image.create(half_w, img_h, false, image.get_format())
+		front_img.blit_rect(image, Rect2i(0, 0, half_w, img_h), Vector2i(0, 0))
+		var front_tex = ImageTexture.create_from_image(front_img)
+
+		var back_img = Image.create(half_w, img_h, false, image.get_format())
+		back_img.blit_rect(image, Rect2i(half_w, 0, half_w, img_h), Vector2i(0, 0))
+		var back_tex = ImageTexture.create_from_image(back_img)
+
+		# Container node voor positie
+		var container = Node2D.new()
 		var col = i % columns
+		@warning_ignore("integer_division")
 		var row = i / columns
-		foto_rect.position = Vector2(
-			margin + col * (cell_w + spacing),
-			margin + row * (cell_h + spacing)
+		container.position = Vector2(
+			margin + col * (cell_w + spacing) + cell_w / 2.0,
+			margin + row * (cell_h + spacing) + cell_h / 2.0
 		)
+		add_child(container)
+		_kast_nodes.append(container)
 
-		# Fade-in animatie voor nieuwe foto's
-		foto_rect.modulate.a = 0.0
-		_grid_container.add_child(foto_rect)
-		_foto_nodes.append(foto_rect)
+		# Sprite gecentreerd in de cel
+		var sprite = Sprite2D.new()
+		sprite.texture = front_tex
+		sprite.centered = true
 
+		# Schaal zodat het in de cel past
+		var tex_w = float(half_w)
+		var tex_h = float(img_h)
+		var scale_factor = minf(cell_w / tex_w, cell_h / tex_h) * 0.9
+		sprite.scale = Vector2(scale_factor, scale_factor)
+
+		container.add_child(sprite)
+
+		_kast_data.append({
+			"front": front_tex,
+			"back": back_tex,
+			"sprite": sprite,
+		})
+
+		# Fade-in animatie
+		container.modulate.a = 0.0
 		var tween = create_tween()
-		tween.tween_property(foto_rect, "modulate:a", 1.0, 0.5).set_delay(i * 0.1)
+		tween.tween_property(container, "modulate:a", 1.0, 0.5).set_delay(i * 0.1)
 
 
 func _resize_background() -> void:
