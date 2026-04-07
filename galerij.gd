@@ -154,9 +154,11 @@ func _scan_fotos() -> void:
 
 	if _kast_nodes.is_empty():
 		_build_full_grid()
-	elif not new_files.is_empty():
-		for path in new_files:
-			_add_new_kast(path)
+	elif new_files.size() == 1:
+		_add_new_kast(new_files[0])
+	elif new_files.size() > 1:
+		# Meerdere nieuwe foto's tegelijk: herbouw het grid
+		_build_full_grid()
 
 
 func _add_new_kast(path: String) -> void:
