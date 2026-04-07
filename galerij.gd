@@ -154,11 +154,10 @@ func _scan_fotos() -> void:
 
 	if _kast_nodes.is_empty():
 		_build_full_grid()
-	elif new_files.size() == 1:
-		_add_new_kast(new_files[0])
-	elif new_files.size() > 1:
-		# Meerdere nieuwe foto's tegelijk: herbouw het grid
-		_build_full_grid()
+	elif not new_files.is_empty():
+		# Voeg nieuwe foto's toe met delay ertussen
+		for i in new_files.size():
+			get_tree().create_timer(i * 1.0).timeout.connect(_add_new_kast.bind(new_files[i]))
 
 
 func _add_new_kast(path: String) -> void:
