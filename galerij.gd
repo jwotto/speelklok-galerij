@@ -290,7 +290,7 @@ func _get_grid_position(index: int) -> Vector2:
 	var grid_total_w = columns * cell_w + (columns - 1) * spacing
 	var grid_total_h = rows * cell_h + (rows - 1) * spacing
 	var grid_offset_x = (viewport_size.x - grid_total_w) / 2.0
-	var grid_offset_y = (viewport_size.y - grid_total_h) / 2.0 + 30.0
+	var grid_offset_y = (viewport_size.y - grid_total_h) / 2.0 + viewport_size.y * 0.028
 	var col = index % columns
 	@warning_ignore("integer_division")
 	var row = index / columns
