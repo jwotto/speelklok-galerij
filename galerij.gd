@@ -242,7 +242,8 @@ func _create_kast(path: String, index: int, fly_in: bool) -> Dictionary:
 	var kast_pixel_w = tex_w * scale_factor
 	var kast_pixel_h = tex_h * scale_factor
 	shadow.scale = Vector2(kast_pixel_w * 1.2 / 128.0, 40.0 / 128.0)
-	shadow.position = Vector2(0, kast_pixel_h * 0.5 + shadow_y_offset)
+	var viewport_scale = get_viewport_rect().size.y / 1080.0
+	shadow.position = Vector2(0, kast_pixel_h * 0.5 + shadow_y_offset * viewport_scale)
 	container.add_child(shadow)
 
 	# Kast sprite met outline
