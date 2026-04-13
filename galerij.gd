@@ -23,7 +23,7 @@ extends Node2D
 @export_group("Effecten")
 @export var tilt_angle: float = 3.0
 @export var shadow_opacity: float = 0.25
-@export var shadow_y_offset: float = -100.0
+@export var shadow_y_offset: float = -50.0
 
 @onready var _background: TextureRect = $Background
 
