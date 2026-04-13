@@ -13,6 +13,10 @@ config_version=5
 config/name="Speelklok Galerij"
 run/main_scene="res://galerij.tscn"
 config/features=PackedStringArray("4.6")
+boot_splash/bg_color=Color(0, 0, 0, 1)
+boot_splash/image="res://wotto_logo.png"
+boot_splash/fullsize=false
+boot_splash/use_filter=true
 
 [display]
 
