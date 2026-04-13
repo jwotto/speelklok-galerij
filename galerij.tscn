@@ -16,6 +16,6 @@ fill_to = Vector2(0.93434346, 0.9478114)
 script = ExtResource("1_script")
 
 [node name="Background" type="TextureRect" parent="."]
-offset_right = 1920.0
-offset_bottom = 1080.0
+offset_right = 3840.0
+offset_bottom = 2160.0
 texture = SubResource("GradientTexture2D_bg")
